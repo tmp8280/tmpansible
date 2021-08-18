@@ -1,0 +1,139 @@
+#### Complete Below list of pre-requisite on Apple M1 client machine #######
+#### Pre-Requisite 1. Python3 MT.zip should be already present and unzipped at location /Users/Shared/ with name 'EPModularTestFramework' ###
+#### Pre-Requisite 2. Create copy of suite folder in directory /Users/Shared/suites_backup
+#### Complete below pre-requisite on Intel based client machine #######
+##### Pre-Requisite - Need to have latest suite folder on control machine. this job should be run ONLY after #####installAgentandRunAllMTsuites.yaml
+--- 
+- 
+  name: "Ansible to execute the suites on macOS client machines provided client machine has agent running"
+  become: true
+  hosts: all
+  gather_facts: yes
+  strategy: free
+  vars: 
+   suite_list: '{{ SuiteList }}' 
+
+  tasks:
+##### Below Block is to run the suites on Non-M1 machine #########
+##### Pre-Requisite - Need to have latest suite folder on control machine
+    - block:
+
+       - name: Delete the suites as pre-requisite
+         file:
+           path: /Users/Shared/ep_test/ModularTestFramework/main/test/endpointModular/test/suite/
+           state: absent
+           directory_mode: yes
+
+       - name: "Create a directory suite"
+         file:
+           path: /Users/Shared/ep_test/ModularTestFramework/main/test/endpointModular/test/suite/
+           state: directory
+           mode: "0777"
+
+       - block:
+           - name: "copy list of suites to execute to client location"
+             copy:
+               src: /home/admin/TMP/suite/{{ item }}
+               dest: /Users/Shared/ep_test/ModularTestFramework/main/test/endpointModular/test/suite/
+               mode: "0766"
+               directory_mode: yes 	
+             with_items: "{{ SuiteList }}"
+         when: suite_list != 'all'
+
+       - name: "Set permission for endpointModular folder"
+         shell: chmod -R +rwx /Users/Shared/ep_test/ModularTestFramework/main/test/endpointModular/
+         become: yes
+         become_user: root 
+         args:
+           chdir: /Users/Shared/ep_test/ModularTestFramework/main/test/ 
+         register: shell_output
+
+       - block:
+           - name: "Set the environmental variables and run nightlyftrunner"
+             shell: |
+               . ./setup.sh
+               sudo python -m  core.nightlyftrunner --restrict-to-custom=local,nightly --restrict-to-size=small,medium,large --restrict-to-status=stable --log-level=DEBUG
+             become_user: Administrator
+             args:
+               chdir: /Users/Shared/ep_test/ModularTestFramework/main/test/endpointModular 
+             register: shell_output5
+
+           - name: debug nightlyftrunnner output
+             debug: var=shell_output5
+         when: ansible_facts['distribution_version'] == "10.15.7"
+
+       - block:
+           - name: "Set the environmental variables and run nightlyftrunner"
+             shell: |
+               . ./setup.sh
+               sudo python -m  core.nightlyftrunner --restrict-to-custom=local,nightly --restrict-to-size=small,medium,large --restrict-to-status=stable --log-level=DEBUG
+             become_user: admin
+             args:
+               chdir: /Users/Shared/ep_test/ModularTestFramework/main/test/endpointModular 
+             register: shell_output5
+
+           - name: debug nightlyftrunnner output
+             debug: var=shell_output5
+         when: ansible_facts['distribution_version'] == "11.2"
+
+
+       - name: "Delete the executed suites from suite directory "
+         file:
+           path: /Users/Shared/ep_test/ModularTestFramework/main/test/endpointModular/test/suite/{{ item }}
+           state: absent
+           directory_mode: yes
+         with_items: "{{ SuiteList }}"
+
+      when: ansible_facts['machine'] == "x86_64"
+
+#### Below block will be executed on Apple M1 machine #######
+#### Pre-Requisite 1. Python3 MT.zip should be already present and unzipped at location /Users/Shared/ with name 'EPModularTestFramework' ###
+#### Pre-Requisite 2. Create copy of suite folder in directory /Users/Shared/suites_backup
+    - block:
+
+       - name: Delete the suites as pre-requisite
+         file:
+           path: /Users/Shared/EPModularTestFramework/main/test/endpointModular/test/suite/
+           state: absent
+           directory_mode: yes
+
+       - name: "Create a directory suite"
+         file:
+           path: /Users/Shared/EPModularTestFramework/main/test/endpointModular/test/suite/
+           state: directory
+           mode: "0777"
+
+       - block:
+           - name: "copy list of suites to execute to client location"
+             copy:
+               src: /Users/Shared/suites_backup/suite/{{ item }}
+               dest: /Users/Shared/EPModularTestFramework/main/test/endpointModular/test/suite/
+               mode: "0777"
+               directory_mode: yes
+               remote_src: yes 	
+             with_items: "{{ SuiteList }}"
+         when: suite_list != 'all'
+
+       - name: "Set the environmental variables and run nightlyftrunner with python3 interpreter"
+         shell: |
+            . ./setup.sh
+            sudo python3 configure.py 
+            sudo python3 -m  core.nightlyftrunner --restrict-to-custom=local,nightly --restrict-to-size=small,medium,large --restrict-to-status=stable --log-level=DEBUG
+         args:
+            chdir: /Users/Shared/EPModularTestFramework/main/test/endpointModular 
+         register: shell_output1
+
+       - name: debug nightlyftrunnner output
+         debug: var=shell_output1    
+
+
+       - name: Copy the Original suites  a backup of suites directory
+         copy:
+           src: /Users/Shared/suites_backup/suite/
+           dest: /Users/Shared/EPModularTestFramework/main/test/endpointModular/test/suite/
+           mode: "0777"
+           directory_mode: yes
+           remote_src: yes
+
+
+      when : ansible_facts['machine'] == "arm64"
